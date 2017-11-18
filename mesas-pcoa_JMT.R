@@ -177,16 +177,14 @@ make_plot <- function(plotting_data_table, mapping_col) {
         # Can change legend title from NULL to name if desired
         guides(fill = guide_legend(title=NULL))
       
-    }
-    
-    if (!is.null(ellipsoidConf) && ellipsoidConf != 0) {
-      # ellipse <- car::dataEllipse(plotting_data_table$Axis.1, plotting_data_table$Axis.2, 
-      #                             groups = metadata, levels = as.numeric(ellipsoidConf), add=TRUE, 
-      #                             plot.points=FALSE, grid=FALSE, center.pch=FALSE, col=rainbow(fac.len))
+      # Add ellipses to non-numeric data if desired by the user
+      if (!is.null(ellipsoidConf) && ellipsoidConf != 0) {
+        
+        ordination_final <- ordination_final +
+          stat_ellipse(aes_string(colour = md_name), level = ellipsoidConf, na.rm = TRUE, show.legend = FALSE,
+                       alpha = 0.7, size = 0.75)
+      }
       
-      ordination_final <- ordination_final +
-        stat_ellipse(aes_string(colour = md_name), level = ellipsoidConf, na.rm = TRUE, show.legend = FALSE,
-                     alpha = 0.6, size = 0.75)
     }
     
     return(ordination_final)
