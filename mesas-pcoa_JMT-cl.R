@@ -94,6 +94,7 @@ pkgTest("ggplot2")
 pkgTest("scales")
 pkgTest("glue")
 pkgTest("RColorBrewer")
+pkgTest("dplyr")
 if (!is.null(ellipsoidConf) ) {
   pkgTest("car")
 }
