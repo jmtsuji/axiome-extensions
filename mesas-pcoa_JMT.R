@@ -1,9 +1,7 @@
 #!/usr/bin/env Rscript
-# Based off mesas-pcoa.R script in "Neufeld MESaS"
-# Created June 3, 2015 by Jackson Tsuji, to improve plot legend and axis titles, and to swtich to using ggplot
-# Last Updated Sept 17, 2015
-# Still in progress... **biplot NOT necessarily reliable!
-# Version: 3.1.3
+# Enhanced mesas-pcoa.R script from "Neufeld MESaS"
+# Copyright Jackson M. Tsuji, 2017
+# Neufeld lab, University of Waterloo, Canada
 
 ########################################################
 ########################################################
@@ -14,14 +12,18 @@ outName <- "pcoa"
 otuTable <- "otu_table_auto_noStreams.tab"
 mappingFile <- "171116_metadata_ELA2016_noStreams.tsv"
 
-# Next two are currently set to defaults and often do not need to be changed
+# Method for calulating distance matrix
 dmethod <- "bray"
+
+# Confidence threshold (e.g., 0.95) for data ellipses. Set to 0 to not plot ellipses.
 ellipsoidConf <- 0
 ########################################################
 ########################################################
 
+# Dump a text file in case of error, for debugging
 options(error = quote(dump.frames("mesas-pcoa-debug", TRUE)))
 
+# Function to automatically install package if missing
 pkgTest <- function(x)
 {
         if (!require(x,character.only = TRUE))
@@ -44,28 +46,21 @@ if (!is.null(ellipsoidConf) ) {
   pkgTest("car")
 }
 
-#Make sure we have a valid distance method
+# Make sure we have a valid distance method
 dlist = c('manhattan','euclidean','canberra','bray','kulczynski','jaccard','gower','altGower','morisita','horn','mountford','raup','binomial','chao','cao')
 
 if (! dmethod %in% dlist ) {
-	print(paste("Invalid distance method:", dmethod))
-	q(status=1)
+	stop(print(paste("Invalid distance method:", dmethod)))
 } 
 
-#Read in and format otu table
-print("Reading OTU table")
-
-rawtable <- read.table(otuTable, skip = 1,
-comment.char = "", header = TRUE, row.names = 1, sep = "\t")
+# Read in and format otu table
+rawtable <- read.table(otuTable, skip = 1, comment.char = "", header = TRUE, row.names = 1, sep = "\t")
 otutable.first <- t(rawtable[1:(ncol(rawtable) - 1)])
-#Sort numerically the samples
-#otutable <- otutable[order(as.integer(sub("X","", rownames(otutable)))),]
 
-print("Reading mapping")
+# Read metadata mapping file
 mapping.first <- read.table(mappingFile, header = TRUE, comment.char = "", row.names = 1, sep = "\t") 
-                            #colClasses = "character")
-# For non-numeric sample names, comment out the following line
-#colnames(mapping) <- paste("X", colnames(mapping), sep = "")
+
+# Adjust numeric sample IDs in metadata file to match OTU table ("X" gets added during AXIOME)
 numeric_names <- suppressWarnings(sapply(rownames(mapping.first),as.numeric))
 numeric <- sum(sapply(numeric_names,is.na)) == 0
 if (numeric) {
@@ -73,83 +68,59 @@ if (numeric) {
 }
 rownames(mapping.first) <- gsub("-",".",rownames(mapping.first),fixed=TRUE)
 
-print("Sorting tables")
-# Sorting samples
+# Check if sample IDs are now the same
+if (length(base::setdiff(rownames(mapping.first), rownames(otutable.first))) >= 1) {
+  stop("Sample IDs do not match between metadata file and OTU table. Exiting...")
+}
+
+# Sort samples by sample ID
 otutable <- otutable.first[order(rownames(otutable.first), na.last = TRUE, decreasing = FALSE),]
 mapping <- mapping.first[order(rownames(mapping.first), na.last = TRUE, decreasing = FALSE),]
 
+# Calculate distance matrix
 print("Computing PCoA")
+d <- vegan::vegdist(otutable, method = dmethod)
 
-d <- vegdist(otutable, method=dmethod)
-
+# Perform PCoA calculations
 print("Making PCoA Plot")
-p <- pcoa(d)
+p <- ape::pcoa(d)
 
-# Uncomment to reverse the orientations of Axis 1 or Axis 2 points, respectively (just for visualization purposes; does not affect the data)
-# p$vectors[,1]=-p$vectors[,1]
-# p$vectors[,2]=-p$vectors[,2]
+# Print out plotting vectors for user's reference
+p_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
+write.table(p_print, file = "plotting_values.tsv", sep = "\t", col.names = TRUE, row.names = FALSE)
 
-# Preparing to sort by metadata category
-p.sort <- p$vectors
-p.sort <- cbind("sort"=c(1:nrow(p.sort)),p.sort)
-mapping.sort = cbind("sort"=c(1:nrow(mapping)),mapping)
-if (identical(row.names(p.sort), row.names(mapping.sort)) == FALSE) {
-  stop(paste("Row names in sorting vectors do not match.\nOTU table: ", glue::collapse(head(row.names(p.sort), n = 3), sep = ", "), "...",
-             "\n", "Mapping file: ", glue::collapse(head(row.names(mapping.sort), n = 3), sep = ", "), "...",
-             "\n", "Results will be unreliable. Exiting...", sep = ""))
+### Prepare to join by sample_ID
+p_vectors <- as.data.frame(p$vectors)[,c(1:2)]
+p_vectors <- cbind("sample_ID" = rownames(p_vectors), p_vectors)
+mapping_join <- cbind("sample_ID" = rownames(mapping), mapping)
+
+# Check if sample IDs are the same
+if (length(base::setdiff(p_vectors$sample_ID, mapping_join$sample_ID)) >= 1) {
+  stop("Sample IDs do not match between PCoA output file and metadata file. Exiting...")
 }
-# Consider impoving this sanity check (above) to exit out of the script if it fails.
 
-# Print out vectors for user
-p.print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2])
-write.table(p.print, file = "plotting_values.tsv", sep = "\t", col.names = NA)
+# Merge by sample_ID
+plotting_table <- dplyr::left_join(p_vectors, mapping_join, by = "sample_ID")
 
-make_plot <- function(mapping_col) {
-  # Sorting by metadata category
-  mapping.sort <- mapping.sort[order(mapping.sort[,mapping_col+1],na.last = TRUE,decreasing = FALSE),]
-  mapping.sort[,1] = c(1:nrow(mapping.sort))
-  mapping <- mapping.sort[,-1]
-  mapping.sort <- mapping.sort[order(rownames(mapping.sort),na.last = TRUE,decreasing = FALSE),]
+# Function to make PCoA plot
+make_plot <- function(plotting_data_table, mapping_col) {
+  # # Test vars
+  # plotting_data_table <- plotting_table
+  # mapping_col <- 12
   
-  p.sort <- p.sort[order(rownames(p.sort),na.last = TRUE,decreasing = FALSE),]
-  p.sort[,1] <- mapping.sort[,1]
-  p.sort <- p.sort[order(p.sort[,1],na.last = TRUE,decreasing = FALSE),]
-  p$vectors <- p.sort[,-1]
-  
-  # Check row order names are identical
-  if (identical(rownames(p$vectors), rownames(mapping)) == FALSE) {
-    # Find specific non-matching entries
-    non_matching_entries_num <- which(!(rownames(p$vectors) == rownames(mapping)))
-      
-    stop(paste("Metadata column ", mapping_col, ": row names of vegan output and mapping file do not match after sorting. See entries ", 
-               head(glue::collapse(non_matching_entries_num, sep = ", ")), "...", sep = ""))
-  }
-  
-  name <- colnames(mapping)[mapping_col]
-  metadata <- mapping[,mapping_col]
+  md_name <- colnames(plotting_data_table)[mapping_col]
+  metadata <- plotting_data_table[,mapping_col]
   fac.len <- length(unique(metadata))
   
-  if (fac.len < 2 ) {
-    print(paste("Ignoring", name, "because all values are identical."))
-  } else if (fac.len >= 2) {
-   
-    # Choose simpler colour palette if number of colours is low, and a gradient if higher
-    if (fac.len == 2) {
-      # Special case because RColorBrewer can give a minimum of 3 colours as output
-      metadata_colours <- RColorBrewer::brewer.pal(name = "Dark2", n = 3)[c(1,2)]
-    } else if (fac.len <= 8) {
-      metadata_colours <- RColorBrewer::brewer.pal(name = "Dark2", n = fac.len)
-    } else if (fac.len <= 12) {
-      metadata_colours <- RColorBrewer::brewer.pal(name = "Set3", n = fac.len)
-    } else {
-      # Can adjust start and end below to change spectrum of colours plotted
-      metadata_colours <- hue_pal(h = c(20,290))(fac.len)
-    }
+  # Skip plotting if all values are identical in the metadata category
+  if (fac.len == 1) {
     
-    p.frame = data.frame("Axis.1" = p$vectors[,1], "Axis.2" = p$vectors[,2], "Metadata" = metadata)
+    print(paste("Ignoring", md_name, "because all values are identical."))
     
-    # General plot
-    z = ggplot(p.frame, aes(x = Axis.1, y = Axis.2)) +
+  } else if (fac.len > 1) {
+    
+    # Make general plot
+    ordination_general <- ggplot(plotting_data_table, aes(x = Axis.1, y = Axis.2)) +
       theme_bw() +
       theme(panel.grid = element_blank(), axis.title = element_text(size = 14), 
             strip.text.x = element_text(size = 12), strip.text.y = element_text(size = 8), strip.background = element_rect(fill = "#e6e6e6"),
@@ -159,44 +130,72 @@ make_plot <- function(mapping_col) {
             legend.text = element_text(size = 10), legend.title = element_text(size = 10, face = "bold"),
             legend.key = element_rect(colour = "transparent", size = 0.5), legend.key.size = unit(5, "mm"),
             legend.spacing = unit(1, "mm"), legend.box.just = "left", plot.margin = unit(c(2,2,2,2), "mm")) +
-      ggtitle(paste("PCoA ordination: ", name, "\nMethod: '", dmethod, "'", sep="")) +
-      xlab(paste("Axis 1 (", round(p$values[1,3]*100,digits = 1), "%)", sep = "")) +
-      ylab(paste("Axis 2 (", round(p$values[2,3]*100,digits = 1), "%)", sep = ""))
+      ggtitle(paste("PCoA ordination: ", md_name, "\nMethod: '", dmethod, "'", sep="")) +
+      xlab(paste("Axis 1 (", round(p$values[1,3]*100, digits = 1), "%)", sep = "")) +
+      ylab(paste("Axis 2 (", round(p$values[2,3]*100, digits = 1), "%)", sep = ""))
       
-    # Change plotting type if numeric vs. non-numeric
+    # Finish the plot differently if data is numeric vs. non-numeric
     if (is.numeric(metadata) == TRUE) {
+      
+      # If numeric, use a gradient scale
       gradient_palette <- rev(RColorBrewer::brewer.pal(name = "YlGnBu", n = 5))
       
-      z_final <- z + 
-        geom_point(aes(fill = Metadata), shape = 21, size = 3.5, alpha = 0.8) +
+      ordination_final <- ordination_general + 
+        geom_point(aes_string(fill = md_name), shape = 21, size = 3.5, alpha = 0.8) +
         scale_fill_gradientn(colours = gradient_palette, na.value = "grey50") +
         # Can change legend title from NULL to name if desired
-        guides(fill = guide_colourbar(title=NULL))
+        guides(fill = guide_colourbar(title = NULL))
       
     } else {
+      
+      # If non-numeric, treat as a factor
       metadata <- factor(metadata)
       
-      z_final <- z + 
-        geom_point(aes(fill = metadata), shape = 21, size = 3.5, alpha = 0.8) +
+      # Choose simpler colour palette if number of colours is low, and a gradient if higher
+      if (fac.len == 2) {
+        # Special case because RColorBrewer can give a minimum of 3 colours as output
+        metadata_colours <- RColorBrewer::brewer.pal(name = "Dark2", n = 3)[c(1,2)]
+      } else if (fac.len <= 8) {
+        metadata_colours <- RColorBrewer::brewer.pal(name = "Dark2", n = fac.len)
+      } else if (fac.len <= 12) {
+        metadata_colours <- RColorBrewer::brewer.pal(name = "Set3", n = fac.len)
+      } else {
+        # Can adjust start and end below to change spectrum of colours plotted
+        metadata_colours <- hue_pal(h = c(20,290))(fac.len)
+      }
+      
+      ordination_final <- ordination_general + 
+        geom_point(aes_string(fill = md_name), shape = 21, size = 3.5, alpha = 0.8) +
         scale_fill_manual(values = metadata_colours, na.value="white") +
+        scale_colour_manual(values = metadata_colours, na.value="white") +
         # Can change legend title from NULL to name if desired
         guides(fill = guide_legend(title=NULL))
+      
     }
     
     if (!is.null(ellipsoidConf) && ellipsoidConf != 0) {
-      ellipse <- dataEllipse(p$vectors[,1],p$vectors[,2],groups=metadata,levels=as.numeric(ellipsoidConf),add=TRUE,plot.points=FALSE,grid=FALSE,center.pch=FALSE,col=rainbow(fac.len))
+      # ellipse <- car::dataEllipse(plotting_data_table$Axis.1, plotting_data_table$Axis.2, 
+      #                             groups = metadata, levels = as.numeric(ellipsoidConf), add=TRUE, 
+      #                             plot.points=FALSE, grid=FALSE, center.pch=FALSE, col=rainbow(fac.len))
+      
+      ordination_final <- ordination_final +
+        stat_ellipse(aes_string(colour = md_name), level = ellipsoidConf, na.rm = TRUE, show.legend = FALSE,
+                     alpha = 0.6, size = 0.75)
     }
     
-    return(z_final)
+    return(ordination_final)
     
   } else {
-    stop("Something is fishy with one of the metadata categories. Having a hard time determining the number of factors. Exiting...")
+    
+    # If fac.len is less than 1, it means something is wrong with the metadata.
+    stop(paste("Something is wrong with metadata category, '", md_name, "'. Appears to contain < 1 unique value. Exiting...", sep = ""))
+    
   }
 
 }
 
 # Make plots
-plot_list <- lapply(1:ncol(mapping), make_plot)
+plot_list <- lapply(4:ncol(plotting_table), function(x) { make_plot(plotting_table, x) })
 
 # Remove ones where all values are identical
 plots_to_keep <- logical(length = 0)
