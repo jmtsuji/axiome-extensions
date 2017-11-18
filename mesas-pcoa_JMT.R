@@ -53,41 +53,47 @@ if (! dmethod %in% dlist ) {
 	stop(print(paste("Invalid distance method:", dmethod)))
 } 
 
+### Import and pre-process input data
 # Read in and format otu table
 rawtable <- read.table(otuTable, skip = 1, comment.char = "", header = TRUE, row.names = 1, sep = "\t")
-otutable.first <- t(rawtable[1:(ncol(rawtable) - 1)])
+otutable <- t(rawtable[1:(ncol(rawtable) - 1)])
 
 # Read metadata mapping file
-mapping.first <- read.table(mappingFile, header = TRUE, comment.char = "", row.names = 1, sep = "\t") 
+mapping <- read.table(mappingFile, header = TRUE, comment.char = "", row.names = 1, sep = "\t") 
 
 # Adjust numeric sample IDs in metadata file to match OTU table ("X" gets added during AXIOME)
-numeric_names <- suppressWarnings(sapply(rownames(mapping.first),as.numeric))
+numeric_names <- suppressWarnings(sapply(rownames(mapping),as.numeric))
 numeric <- sum(sapply(numeric_names,is.na)) == 0
 if (numeric) {
-  rownames(mapping.first) <- paste("X", rownames(mapping.first), sep = "")
+  rownames(mapping) <- paste("X", rownames(mapping), sep = "")
 }
-rownames(mapping.first) <- gsub("-",".",rownames(mapping.first),fixed=TRUE)
+rownames(mapping) <- gsub("-",".",rownames(mapping),fixed=TRUE)
 
 # Check if sample IDs are now the same
-if (length(base::setdiff(rownames(mapping.first), rownames(otutable.first))) >= 1) {
+if (length(base::setdiff(rownames(mapping), rownames(otutable))) >= 1) {
   stop("Sample IDs do not match between metadata file and OTU table. Exiting...")
 }
 
-# Sort samples by sample ID
-otutable <- otutable.first[order(rownames(otutable.first), na.last = TRUE, decreasing = FALSE),]
-mapping <- mapping.first[order(rownames(mapping.first), na.last = TRUE, decreasing = FALSE),]
+# Sort samples by sample ID for clarity
+otutable <- otutable[order(rownames(otutable), na.last = TRUE, decreasing = FALSE),]
+mapping <- mapping[order(rownames(mapping), na.last = TRUE, decreasing = FALSE),]
 
-# Calculate distance matrix
+
+### Calculate distance matrix
 print("Computing PCoA")
 d <- vegan::vegdist(otutable, method = dmethod)
 
-# Perform PCoA calculations
+### Perform PCoA calculations
 print("Making PCoA Plot")
 p <- ape::pcoa(d)
 
-# Print out plotting vectors for user's reference
+# Print out plotting vectors and Eigenvalues for user's reference
 p_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
 write.table(p_print, file = "plotting_values.tsv", sep = "\t", col.names = TRUE, row.names = FALSE)
+
+eigenval_df <- data.frame("Eigenvalues" = p$values$Eigenvalues, "Relative_Eigenvalues" = p$values$Relative_eig)
+eigenval_filename <- paste(dirname(outName),"/eigenvalues.tsv",sep="")
+write.table(eigenval_df, eigenval_filename, col.names = TRUE, row.names = FALSE, sep = "\t")
 
 ### Prepare to join by sample_ID
 p_vectors <- as.data.frame(p$vectors)[,c(1:2)]
@@ -194,7 +200,7 @@ make_plot <- function(plotting_data_table, mapping_col) {
 
 }
 
-# Make plots
+# Make PCoA plot figures
 plot_list <- lapply(4:ncol(plotting_table), function(x) { make_plot(plotting_table, x) })
 
 # Remove ones where all values are identical
@@ -208,30 +214,28 @@ for (i in 1:length(plot_list)) {
 }
 plot_list <- subset(plot_list, plots_to_keep)
 
-# Restore mapping file to its original state when the PCoA was computed
-# mapping <- mapping.first[order(rownames(mapping.first), na.last = TRUE, decreasing = FALSE),]
-
-print("Making biplot")
-# First, we take the mapping file and we coerce the columns to numeric
-numeric_mapping <- suppressWarnings(apply(mapping,2,as.numeric))
-numeric <- colSums(apply(numeric_mapping,2,is.na)) == 0
-numeric_mapping <- numeric_mapping[,numeric, drop = FALSE]
-rownames(numeric_mapping) <- rownames(mapping)
-bi_plot <- biplot(p, apply(numeric_mapping, 2, scale, center=TRUE, scale=TRUE))
-
-# Prepare Eigenvalues for output
-eigenval_df <- data.frame("Eigenvalues" = p$values$Eigenvalues, "Relative_Eigenvalues" = p$values$Relative_eig)
-
-# Write all output
+# Write PCoA plots to single PDF
 pcoa_filename <- paste(dirname(outName),"/pcoa-", dmethod, ".pdf", sep="")
 pdf(pcoa_filename, width = 8, height = 7)
 print(plot_list)
 dev.off()
 
+
+### Make biplot
+print("Making biplot")
+
+# Take the metadata mapping file and coerce the columns to numeric
+numeric_mapping <- suppressWarnings(apply(mapping,2,as.numeric))
+numeric <- colSums(apply(numeric_mapping,2,is.na)) == 0
+
+# Create subset of mapping file with only numeric entries
+numeric_mapping <- numeric_mapping[,numeric, drop = FALSE]
+rownames(numeric_mapping) <- rownames(mapping)
+
+# Save as PDF (cannot save the biplot to a variable for some reason)
 biplot_filename <- paste(dirname(outName),"/pcoa-biplot.pdf", sep="")
-pdf(biplot_filename)
-print(biplot(p, apply(numeric_mapping, 2, scale, center=TRUE, scale=TRUE)))
+pdf(biplot_filename, width = 8, height = 8)
+stats::biplot(p, apply(numeric_mapping, 2, scale, center=TRUE, scale=TRUE))
 dev.off()
 
-eigenval_filename <- paste(dirname(outName),"/eigenvalues.tsv",sep="")
-write.table(eigenval_df, eigenval_filename, col.names = TRUE, row.names = FALSE, sep = "\t")
+
