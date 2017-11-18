@@ -3,8 +3,8 @@
 # Copyright Jackson M. Tsuji, 2017
 # Neufeld lab, University of Waterloo, Canada
 
-# Dump a text file in case of error, for debugging
-options(error = quote(dump.frames("mesas-pcoa-debug", TRUE)))
+# # Dump a text file in case of error, for debugging
+# options(error = quote(dump.frames("mesas-pcoa-debug", TRUE)))
 
 # Function to automatically install package if missing
 pkgTest <- function(x)
@@ -16,18 +16,8 @@ pkgTest <- function(x)
         }
 }
 
-# Load libraries
+# Load parser library
 pkgTest('getopt')
-pkgTest("vegan")
-pkgTest("ape")
-pkgTest("scales")
-pkgTest("ggplot2")
-pkgTest("scales")
-pkgTest("glue")
-pkgTest("RColorBrewer")
-if (!is.null(ellipsoidConf) ) {
-  pkgTest("car")
-}
 
 ### Grab arguments
 # Arguments required:
@@ -38,29 +28,40 @@ if (!is.null(ellipsoidConf) ) {
 # -o output filename
 # -d distance method
 # -p plot ellipsoids
-spec = matrix(c('input', 'i', 1, "character",
+spec <- matrix(c('input', 'i', 1, "character",
+                 'mapping','m',1,"character",
                 'distance','d',2,'character',
-                'plot_ellipsoids','p',2,'character',
-                'mapping','m',1,"character",
                 'output','o',1,"character",
+                'plot_ellipsoids','p',2,'double',
                 'help','h',2,"character"), byrow=TRUE, ncol=4)
 
-opt = getopt(spec)
+opt <- getopt(spec)
 
 # If help was called: print a friendly message, then exit with a non-zero error code
 if ( !is.null(opt$help) ) {
+  
+  cat("mesas-poca.R: script for generating PCoA ordinations with overlaid metadata for microbial community analysis.\n", 
+      "Copyright Neufeld lab, 2017 (jneufeld@uwaterloo.ca).\n", "Version:2.0.0\n\n")
+  
   cat(getopt(spec, usage=TRUE))
+  
+  cat("\n")
+  
+  cat("Details:\n", "-input\t\t\tTSV-format OTU table (JSON not supported)\n",
+      "-mapping\t\tTSV-format metadata mapping file with sample IDs corresponding to OTU table\n",
+      "-distance\t\tDistance method for calculation for distance matrix from OTU table. For options, see 'method' for vegan::vegdist [bray]\n",
+      "-output\t\tName of output PDF file with main PCoA ordinations [poca-bray.pdf]\n",
+      "-plot_ellipsoids\tConfidence level (e.g., 0.95) for drawing data ellipses around ordinated points belonging to the same metadata category. [0]\n\n")
+  
   q(status=1)
 }
 
 # Error and quit if required inputs are not provided
 if ( is.null(opt$input) ) {
-  print("Input OTU table required.")
-  q(status=1)
+  stop("Input OTU table required.")
 }
 if ( is.null(opt$mapping) ) {
-  print("Mapping file required.")
-  q(status=1)
+  stop("Mapping file required.")
 }
 
 # Add default setting if not provided for other inputs
@@ -84,6 +85,18 @@ dlist = c('manhattan','euclidean','canberra','bray','kulczynski','jaccard','gowe
 if (! dmethod %in% dlist ) {
 	stop(print(paste("Invalid distance method:", dmethod)))
 } 
+
+# Load other libraries
+pkgTest("vegan")
+pkgTest("ape")
+pkgTest("scales")
+pkgTest("ggplot2")
+pkgTest("scales")
+pkgTest("glue")
+pkgTest("RColorBrewer")
+if (!is.null(ellipsoidConf) ) {
+  pkgTest("car")
+}
 
 ### Import and pre-process input data
 # Read in and format otu table
@@ -120,8 +133,10 @@ print("Making PCoA Plot")
 p <- ape::pcoa(d)
 
 # Print out plotting vectors and Eigenvalues for user's reference
-p_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
-write.table(p_print, file = "plotting_values.tsv", sep = "\t", col.names = TRUE, row.names = FALSE)
+p_vectors_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
+p_vectors_print <- cbind("sample_ID" = rownames(p_vectors_print), p_vectors_print)
+p_vectors_print_filename <- paste(dirname(outName),"/ordination_plotting_coords.tsv",sep="")
+write.table(p_vectors_print, p_vectors_print_filename, sep = "\t", col.names = TRUE, row.names = FALSE)
 
 eigenval_df <- data.frame("Eigenvalues" = p$values$Eigenvalues, "Relative_Eigenvalues" = p$values$Relative_eig)
 eigenval_filename <- paste(dirname(outName),"/eigenvalues.tsv",sep="")
@@ -243,13 +258,7 @@ for (i in 1:length(plot_list)) {
   }
 }
 plot_list <- subset(plot_list, plots_to_keep)
-
-# Write PCoA plots to single PDF
-pcoa_filename <- paste(dirname(outName),"/pcoa-", dmethod, ".pdf", sep="")
-pdf(pcoa_filename, width = 8, height = 7)
-print(plot_list)
-dev.off()
-
+# Will save as a single PDF with the biplot below.
 
 ### Make biplot
 print("Making biplot")
@@ -262,10 +271,10 @@ numeric <- colSums(apply(numeric_mapping,2,is.na)) == 0
 numeric_mapping <- numeric_mapping[,numeric, drop = FALSE]
 rownames(numeric_mapping) <- rownames(mapping)
 
-# Save as PDF (cannot save the biplot to a variable for some reason)
-biplot_filename <- paste(dirname(outName),"/pcoa-biplot.pdf", sep="")
-pdf(biplot_filename, width = 8, height = 8)
+# Save as PDF along with PCoA plots (cannot save the biplot to a variable for some reason)
+pcoa_filename <- outName
+pdf(pcoa_filename, width = 8, height = 7)
+print(plot_list)
 stats::biplot(p, apply(numeric_mapping, 2, scale, center=TRUE, scale=TRUE))
 dev.off()
-
 

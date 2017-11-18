@@ -88,8 +88,10 @@ print("Making PCoA Plot")
 p <- ape::pcoa(d)
 
 # Print out plotting vectors and Eigenvalues for user's reference
-p_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
-write.table(p_print, file = "plotting_values.tsv", sep = "\t", col.names = TRUE, row.names = FALSE)
+p_vectors_print <- data.frame(Axis.1 = p$vectors[,1], Axis.2 = p$vectors[,2], Axis.3 = p$vectors[,3])
+p_vectors_print <- cbind("sample_ID" = rownames(p_vectors_print), p_vectors_print)
+p_vectors_print_filename <- paste(dirname(outName),"/ordination_plotting_coords.tsv",sep="")
+write.table(p_vectors_print, p_vectors_print_filename, sep = "\t", col.names = TRUE, row.names = FALSE)
 
 eigenval_df <- data.frame("Eigenvalues" = p$values$Eigenvalues, "Relative_Eigenvalues" = p$values$Relative_eig)
 eigenval_filename <- paste(dirname(outName),"/eigenvalues.tsv",sep="")
@@ -211,13 +213,7 @@ for (i in 1:length(plot_list)) {
   }
 }
 plot_list <- subset(plot_list, plots_to_keep)
-
-# Write PCoA plots to single PDF
-pcoa_filename <- paste(dirname(outName),"/pcoa-", dmethod, ".pdf", sep="")
-pdf(pcoa_filename, width = 8, height = 7)
-print(plot_list)
-dev.off()
-
+# Will save as a single PDF with the biplot below.
 
 ### Make biplot
 print("Making biplot")
@@ -230,10 +226,10 @@ numeric <- colSums(apply(numeric_mapping,2,is.na)) == 0
 numeric_mapping <- numeric_mapping[,numeric, drop = FALSE]
 rownames(numeric_mapping) <- rownames(mapping)
 
-# Save as PDF (cannot save the biplot to a variable for some reason)
-biplot_filename <- paste(dirname(outName),"/pcoa-biplot.pdf", sep="")
-pdf(biplot_filename, width = 8, height = 8)
+# Save as PDF along with PCoA plots (cannot save the biplot to a variable for some reason)
+pcoa_filename <- outName
+pdf(pcoa_filename, width = 8, height = 7)
+print(plot_list)
 stats::biplot(p, apply(numeric_mapping, 2, scale, center=TRUE, scale=TRUE))
 dev.off()
-
 
