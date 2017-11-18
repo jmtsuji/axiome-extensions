@@ -8,7 +8,7 @@
 # Variables for local machine use - USER INPUT HERE (only)
 # After adding desired input, run the script for output
 setwd("/Users/JTsuji/Documents/Research_General/PhD/04e_Biogeography/06_iTag_analysis/01_ELA2016_survey_AXIOME/02_round1_all/convert_otu_table/rarefied_biom_to_tab0/02_noStreams/")
-outName <- "pcoa"
+outName <- "pcoa-bray.pdf"
 otuTable <- "otu_table_auto_noStreams.tab"
 mappingFile <- "171116_metadata_ELA2016_noStreams.tsv"
 
