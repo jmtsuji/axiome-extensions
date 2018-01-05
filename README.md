@@ -1,5 +1,5 @@
 # axiome-extensions
-BETA personal scripts to extend or improve AXIOME functionality
+BETA personal scripts to extend or improve [AXIOME2](https://github.com/neufeld/AXIOME2) or [MESaS](https://github.com/neufeld/MESaS) functionality
 
 Copyright Jackson M. Tsuji, 2017
 
