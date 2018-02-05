@@ -10,7 +10,7 @@ set -e
 set -u
 set -o pipefail
 
-script_version=1.0.0
+script_version=1.0.1
 
 # If no input is provided, exit out and provide help
 if [ $# == 0 ]
@@ -33,7 +33,9 @@ if [ $# == 0 ]
 	printf "* filepath_run2_R1: filepath to the R1 reads of the second Illumina run for that sample\n"
 	printf "* filepath_run2_R1: filepath to the R2 reads of the second Illumina run for that sample\n"
 	printf "* ...repeat for as many runs as you have.\n\n"
-	printf "Note that this script only works for non-interleaved paired-end reads.\n"
+	printf "Caveats to using this script:\n"
+	printf "* Note that this script only works for non-interleaved paired-end reads.\n"
+	printf "* Also note that you'll likely run into problems if you used different barcodes in the two Illumina runs for the same sample. If different barcodes were used, I'd recommend removing any primers/barcode tags upstream of merging the read files together to help prevent issues with tools such as PANDAseq.\n"
     printf "\n\n"
     exit 1
 fi
