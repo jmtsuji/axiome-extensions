@@ -237,7 +237,7 @@ function main {
 	merge_all_reads
 	
 	echo ""
-	echo "Read merging finished. Output saved in folder '${output_folder_path}'."
+	echo "Read merging finished. Output saved in folder '$(realpath ${output_folder_path})'."
 	echo ""
 
 	echo "$(basename $0): finished at $(date)."
