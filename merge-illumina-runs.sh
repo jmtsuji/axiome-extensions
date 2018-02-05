@@ -20,13 +20,14 @@ if [ $# == 0 ]
     printf "Contact Jackson M. Tsuji (jackson.tsuji@uwaterloo.ca) for bug reports or feature requests.\n\n"
     printf "Usage: $(basename $0) merge_description_file.tsv number_of_runs output_folder_path | tee $(basename $0 .sh).log \n\n"
     printf "Usage details:\n"
+    printf "* input files: MUST BE gzipped FastQ files with extension .fastq.gz\n"
     printf "* merge_description_file.tsv: tab-separated file with headers. See more detailed description below.\n"
 	printf "* number_of_runs: number of sequencing runs to merge (e.g., 2).\n"
 	printf "* output_folder_path: path to where you want the merged reads to be output.\n"
 	printf "\n\n"
 	printf "Column names for merge_description_file.tsv (MUST EXACTLY MATCH):\n"
 	printf "* sampleID: the same of the sample. The merged file will be this name followed by _R1.[extension] or _R2.[extension]\n"
-	printf "    **Importantly, files to be merged should have the SAME FORMAT (e.g., .fastq.gz)\n"
+	printf "    **Importantly, files to be merged MUST BE gzipped FastQ files with extension .fastq.gz\n"
 	printf "* filepath_run1_R1: filepath to the R1 reads of the first Illumina run for that sample\n"
 	printf "* filepath_run1_R2: filepath to the R2 reads of the first Illumina run for that sample\n"
 	printf "* filepath_run2_R1: filepath to the R1 reads of the second Illumina run for that sample\n"
@@ -157,7 +158,7 @@ function merge_R1_reads {
 			
 			# Add that file's contents onto the output file
 			echo "Run ${run}: ${input_filepath} --> ${output_path}"
-			#cat ${input_filepath} >> ${output_path}
+			cat ${input_filepath} >> ${output_path}
 		done
 		
 	done
@@ -210,7 +211,7 @@ function merge_R2_reads {
 			
 			# Add that file's contents onto the output file
 			echo "Run ${run}: ${input_filepath} --> ${output_path}"
-			#cat ${input_filepath} >> ${output_path}
+			cat ${input_filepath} >> ${output_path}
 		done
 		
 	done
