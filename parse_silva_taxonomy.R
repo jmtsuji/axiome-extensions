@@ -20,7 +20,7 @@ check_ambiguity_pattern <- function(ambiguous_ranks, rank_number) {
       
     } else if ( rank_number > 1 && rank_number <= 7 ) {
       # Recursion: If you're still at the far right or the middle of the taxonomic ranks, then all is well. Keep moving back until you hit the end.
-      message("Found ambiguity at position ", rank_number, ". Moving back one.")
+      # message("Found ambiguity at position ", rank_number, ". Moving back one.")
       check_ambiguity_pattern(ambiguous_ranks, (rank_number - 1))
       
     } else {
@@ -57,12 +57,11 @@ parse_silva_taxonomy <- function(taxonomy_string) {
   # Confirm output is 7 long
   if ( length(taxonomy_ranks) != 7 ) {
     stop("Entry should have 7 taxonomic ranks but has ", length(taxonomy_ranks), ". Here are the ranks: '",
-         glue::glue_collapse(taxonomy_ranks, ", "), "'. Exiting...")
+         glue::collapse(taxonomy_ranks, "; "), "'. Exiting...")
   }
   
   # Remove leading 'D_' (or just first five characters, apparently)
-  # TODO - look up pattern
-  silva_leading_pattern <- "" # TODO
+  silva_leading_pattern <- "^D_[0-9]__"
   taxonomy_ranks <- gsub(pattern = silva_leading_pattern, replacement = "", x = taxonomy_ranks)
   
   # HARD-CODED ambigous taxon names in silva
@@ -82,7 +81,7 @@ parse_silva_taxonomy <- function(taxonomy_string) {
   } else if ( first_ambiguous_position < ambiguous_rank_position ) {
     
     warning("Ambiguous taxonomy terms don't occur in a natural chain moving up from 'species' for this taxonomy entry: '",
-         glue::glue_collapse(taxonomy_ranks, ", "), "'. Will only correct for the entries in a chain at the end.")
+         glue::collapse(taxonomy_ranks, "; "), "'. Will only correct for the entries in a chain at the end.")
     
   }
   
@@ -109,7 +108,7 @@ parse_silva_taxonomy <- function(taxonomy_string) {
 # Inputs: 'OTU_table' - data frame of the OTU table, with 'sites' in the columns and OTUs in the rows
         # 'threads' - numeric (length 1) of the number of processor threads to run this function with
 # Output: 'OTU_table' - data frame with added parsed taxonomy (if Consensus.Lineage was present)
-add_silva_taxonomy_to_OTU_table <- function(OTU_table, threads) {
+add_silva_taxonomy_to_OTU_table <- function(OTU_table, threads = 1, keep_original_lineage = FALSE) {
   
   # # Uncomment this if you wanted to read in the OTU table from a file.
   # OTU_table <- read.table(OTU_table_filename, header = TRUE, sep="\t", comment.char = "", skip = 1, stringsAsFactors = FALSE)
@@ -119,16 +118,27 @@ add_silva_taxonomy_to_OTU_table <- function(OTU_table, threads) {
     
     # TODO - add a check that the taxonomy is silva and not greengenes
     
+    # Ensure lineage is a character vector
+    OTU_table$Consensus.Lineage <- as.character(OTU_table$Consensus.Lineage)
+    
     # Parse the taxonomy (multi-threaded support)
-    parsed_taxonomy <- mclapply(OTU_table$Consensus.Lineage, parse_silva_taxonomy, mc.cores = threads)
+    parsed_taxonomy <- mclapply(X = OTU_table$Consensus.Lineage, FUN = parse_silva_taxonomy, mc.cores = threads)
     
     # Bind into a data frame
-    parsed_taxonomy <- as.data.frame(matrix(unlist(parsed_taxonomy), ncol = 7, byrow = TRUE))
+    parsed_taxonomy <- as.data.frame(matrix(unlist(parsed_taxonomy), ncol = 7, byrow = TRUE), stringsAsFactors = FALSE)
     colnames(parsed_taxonomy) <- c("t_Domain", "t_Phylum", "t_Class", "t_Order", 
                                    "t_Family", "t_Genus", "t_Species")
     
     # Attach to the OTU table
     OTU_table <- cbind(OTU_table, parsed_taxonomy)
+    
+    # Optionally remove the Consensus.Lineage column
+    if ( keep_original_lineage == FALSE ) {
+      OTU_table$Consensus.Lineage <- NULL
+    } else if ( is.logical(keep_original_lineage) == FALSE ) {
+      stop("keep_original_lineage must be TRUE(T) or FALSE(F); you provided '", keep_original_lineage, "'. Exiting...")
+    }
+    
   } else {
     warning("The 'Consensus.Lineage' column is not in the provided OTU table, so can't parse taxonomy. Returning the original OTU table.")
   }
